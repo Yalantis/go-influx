@@ -1,7 +1,6 @@
 package influx
 
 import (
-	"runtime"
 	"testing"
 	"time"
 
@@ -14,7 +13,6 @@ func TestInflux_StartWorker_StopWorker(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	numGoroutineBefore := runtime.NumGoroutine()
 	influx, _ := New(client, Config{})
 	influx.RegisterMeasurement(testMeasurement)
 
@@ -25,12 +23,16 @@ func TestInflux_StartWorker_StopWorker(t *testing.T) {
 		t.Fatalf("expected %q to be true", "workerStarted")
 	}
 
-	influx.Shutdown()
-	time.Sleep(time.Millisecond) // shutdown goroutine
+	shutdown := make(chan struct{})
 
-	numGoroutineAfter := runtime.NumGoroutine()
+	go func() {
+		influx.Shutdown()
+		close(shutdown)
+	}()
 
-	if numGoroutineBefore != numGoroutineAfter {
-		t.Fatalf("expected match. want: %v, got: %v", numGoroutineBefore, numGoroutineAfter)
+	select {
+	case <-shutdown:
+	case <-time.After(time.Second):
+		t.Fatal("shutdown deadline exceeded")
 	}
 }
